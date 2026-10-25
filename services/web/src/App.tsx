@@ -3,7 +3,7 @@ type Wallet = { id:string; displayName:string; initials:string; balance:number; 
 type Activity = { id:string; kind:"TRANSFER"|"BILL_PAYMENT"; amount:number; currency:string; status:string; description:string; fromUser:string; toUser:string|null; createdAt:string };
 type Payment = { id:string; amount:number; currency:string; merchantId:string; status:"APPROVED"|"DECLINED"; createdAt:string };
 type Tab = "overview"|"activity"|"operations";
-const apiBase = import.meta.env.VITE_API_BASE_URL ?? "";
+const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
 const money = (n:number,currency="USD") => new Intl.NumberFormat("en-US",{style:"currency",currency,maximumFractionDigits:2}).format(n);
 const dateLabel = (s:string) => new Date(s).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});
 export default function App() {
