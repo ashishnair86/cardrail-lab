@@ -1,38 +1,62 @@
 # Local development
 
-## Payment API
+## Recommended: run the full stack
+
+From the repository root:
 
 ```bash
-cd services/payment-api
-npm install
-npm run dev
+docker compose up --build
 ```
 
-Health check: `http://localhost:3000/health`
+Wait for services to become healthy. Open the operations dashboard at `http://localhost:5173`. The gateway API is at `http://localhost:3000`.
 
-Create a synthetic payment:
+The stack includes PostgreSQL, the Node.js payment gateway, a Python risk service, a network router, an issuer simulator, and the React operations dashboard.
+
+## Exercise the flow as a merchant
+
+Create an approval:
 
 ```bash
-curl -sS http://localhost:3000/api/payments \
+curl -sS -X POST http://localhost:3000/api/payments \
   -H 'Content-Type: application/json' \
-  -d '{"amount":125,"currency":"USD","merchantId":"merchant-demo","scenario":"approve"}'
+  -H 'Idempotency-Key: demo-001' \
+  -d '{"amount":125.50,"currency":"USD","merchantId":"merchant-demo","scenario":"approve"}'
 ```
 
-## Web frontend
+Repeat the exact request with the same idempotency key to see the stored response rather than create another payment.
 
-In a second terminal:
+Create an issuer decline:
 
 ```bash
-cd services/web
-npm install
-npm run dev
+curl -sS -X POST http://localhost:3000/api/payments \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: demo-002' \
+  -d '{"amount":125.50,"currency":"USD","merchantId":"merchant-demo","scenario":"decline"}'
 ```
 
-Open `http://localhost:5173`. The API defaults to `http://localhost:3000`; set `VITE_API_BASE_URL` if needed.
+Create a risk decline (risk service rejects IDs beginning with `risk-`):
 
-## Current limitations
+```bash
+curl -sS -X POST http://localhost:3000/api/payments \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: demo-003' \
+  -d '{"amount":125.50,"currency":"USD","merchantId":"risk-demo","scenario":"approve"}'
+```
 
-- Payment records are held in memory and disappear when the API restarts.
-- This is a synthetic learning demo, not a payment processor.
-- No real card data, credentials, or production secrets should be used.
-- Docker images are starter examples; Kubernetes manifests and CI will be added in later milestones.
+List recorded payments:
+
+```bash
+curl -sS http://localhost:3000/api/payments
+```
+
+## Stop the stack
+
+```bash
+docker compose down
+```
+
+This preserves the database volume. To delete all local CardRail database data too, use `docker compose down -v` only when you intentionally want a clean reset.
+
+## Security and scope
+
+Use synthetic data only. Do not submit real card numbers, CVVs, PINs, production credentials, or sensitive Mastercard information. This educational project is not a real payment processor, does not connect to Visa/Mastercard, and is not PCI-certified.
