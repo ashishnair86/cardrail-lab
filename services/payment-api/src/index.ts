@@ -29,7 +29,7 @@ app.get("/health", async (_req, res) => {
 app.get("/api/payments", async (_req, res) => {
   try {
     const result = await pool.query(
-      "SELECT id, amount, currency, merchant_id AS \"merchantId\", status, created_at AS \"createdAt\", risk_score AS \"riskScore\", decision_reason AS \"decisionReason\", route FROM payments ORDER BY created_at DESC LIMIT 100"
+      "SELECT id, amount::float8 AS amount, currency, merchant_id AS \"merchantId\", status, created_at AS \"createdAt\", risk_score AS \"riskScore\", decision_reason AS \"decisionReason\", route FROM payments ORDER BY created_at DESC LIMIT 100"
     );
     res.json({ items: result.rows });
   } catch (error) {
@@ -65,7 +65,7 @@ app.post("/api/payments", async (req, res) => {
 
   try {
     const existing = await pool.query(
-      "SELECT id, amount, currency, merchant_id AS \"merchantId\", status, created_at AS \"createdAt\", risk_score AS \"riskScore\", decision_reason AS \"decisionReason\", route FROM payments WHERE idempotency_key = $1",
+      "SELECT id, amount::float8 AS amount, currency, merchant_id AS \"merchantId\", status, created_at AS \"createdAt\", risk_score AS \"riskScore\", decision_reason AS \"decisionReason\", route FROM payments WHERE idempotency_key = $1",
       [idempotencyKey]
     );
     if (existing.rowCount) return res.status(200).json({ ...existing.rows[0], idempotentReplay: true });
@@ -97,7 +97,7 @@ app.post("/api/payments", async (req, res) => {
     const saved = await pool.query(
       `INSERT INTO payments (id, idempotency_key, amount, currency, merchant_id, status, risk_score, decision_reason, route, issuer_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-       RETURNING id, amount, currency, merchant_id AS "merchantId", status, created_at AS "createdAt", risk_score AS "riskScore", decision_reason AS "decisionReason", route, issuer_id AS "issuerId"`,
+       RETURNING id, amount::float8 AS amount, currency, merchant_id AS "merchantId", status, created_at AS "createdAt", risk_score AS "riskScore", decision_reason AS "decisionReason", route, issuer_id AS "issuerId"`,
       [id, idempotencyKey, amount, currency, merchantId, outcome.status, risk.score, outcome.reason, outcome.route, outcome.issuerId]
     );
     console.log(JSON.stringify({ event: "payment_decided", paymentId: id, status: outcome.status, riskScore: risk.score, route: outcome.route }));
