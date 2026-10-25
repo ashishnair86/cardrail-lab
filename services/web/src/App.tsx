@@ -1,82 +1,30 @@
-import { useEffect, useState } from "react";
-
-type Payment = {
-  id: string;
-  amount: number;
-  currency: string;
-  merchantId: string;
-  status: "APPROVED" | "DECLINED";
-  createdAt: string;
-};
-
+import { FormEvent, useEffect, useMemo, useState } from "react";
+type Wallet = { id:string; displayName:string; initials:string; balance:number; currency:string };
+type Activity = { id:string; kind:"TRANSFER"|"BILL_PAYMENT"; amount:number; currency:string; status:string; description:string; fromUser:string; toUser:string|null; createdAt:string };
+type Payment = { id:string; amount:number; currency:string; merchantId:string; status:"APPROVED"|"DECLINED"; createdAt:string };
+type Tab = "overview"|"activity"|"operations";
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
-
+const money = (n:number,currency="USD") => new Intl.NumberFormat("en-US",{style:"currency",currency,maximumFractionDigits:2}).format(n);
+const dateLabel = (s:string) => new Date(s).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});
 export default function App() {
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [amount, setAmount] = useState("125.00");
-  const [scenario, setScenario] = useState<"approve" | "decline">("approve");
-  const [message, setMessage] = useState("Connecting to the local payment API…");
-
-  async function refresh() {
-    try {
-      const response = await fetch(`${apiBase}/api/payments`);
-      if (!response.ok) throw new Error(`API returned ${response.status}`);
-      const data = await response.json() as { items: Payment[] };
-      setPayments(data.items);
-      setMessage("Payment API connected");
-    } catch {
-      setMessage("API unavailable. Start the payment API on port 3000.");
-    }
-  }
-
-  useEffect(() => { void refresh(); }, []);
-
-  async function createPayment(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    try {
-      const response = await fetch(`${apiBase}/api/payments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: Number(amount), currency: "USD", merchantId: "merchant-demo", scenario })
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "Payment request failed");
-      setMessage(`Synthetic payment ${data.status.toLowerCase()}`);
-      await refresh();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Request failed");
-    }
-  }
-
-  const approved = payments.filter(p => p.status === "APPROVED").length;
-  const declined = payments.filter(p => p.status === "DECLINED").length;
-
-  return <main className="shell">
-    <header className="topbar">
-      <div className="brand-mark">CR</div>
-      <div><div className="eyebrow">PAYMENT PLATFORM LAB</div><h1>CardRail <span>Operations</span></h1></div>
-      <div className="status"><i /> {message}</div>
-    </header>
-    <section className="intro">
-      <div><p className="eyebrow">SANDBOX ENVIRONMENT</p><h2>Payment activity at a glance.</h2><p className="muted">Synthetic transactions only. This is a learning environment, not a real payment system.</p></div>
-      <form className="create-card" onSubmit={createPayment}>
-        <p className="eyebrow">CREATE TEST PAYMENT</p>
-        <label>Amount (USD)<input type="number" min="0.01" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} required /></label>
-        <label>Simulation scenario<select value={scenario} onChange={e => setScenario(e.target.value as "approve" | "decline")}><option value="approve">Approve</option><option value="decline">Decline</option></select></label>
-        <button type="submit">＋ Create payment</button>
-      </form>
-    </section>
-    <section className="metrics">
-      <article><p className="eyebrow">TOTAL PAYMENTS</p><strong>{payments.length}</strong><span>In-memory demo records</span></article>
-      <article><p className="eyebrow">APPROVED</p><strong>{approved}</strong><span>Simulated approvals</span></article>
-      <article><p className="eyebrow">DECLINED</p><strong>{declined}</strong><span>Simulated declines</span></article>
-    </section>
-    <section className="table-card">
-      <div className="table-head"><div><p className="eyebrow">TRANSACTION STREAM</p><h2>Recent payments</h2></div><button className="secondary" onClick={() => void refresh()}>Refresh</button></div>
-      <div className="table-wrap"><table><thead><tr><th>PAYMENT ID</th><th>MERCHANT</th><th>AMOUNT</th><th>STATUS</th><th>CREATED</th></tr></thead>
-        <tbody>{payments.length === 0 ? <tr><td colSpan={5} className="empty">No payments yet. Create a synthetic payment to begin.</td></tr> : payments.map(p => <tr key={p.id}><td className="mono">{p.id.slice(0, 8)}…</td><td>{p.merchantId}</td><td>{new Intl.NumberFormat("en-US", { style: "currency", currency: p.currency }).format(p.amount)}</td><td><span className={`pill ${p.status.toLowerCase()}`}>{p.status}</span></td><td>{new Date(p.createdAt).toLocaleString()}</td></tr>)}</tbody>
-      </table></div>
-    </section>
-    <footer>CardRail Lab · Phase 1 · Frontend + Payment API</footer>
-  </main>;
+ const [wallets,setWallets]=useState<Wallet[]>([]),[userId,setUserId]=useState("alex"),[activity,setActivity]=useState<Activity[]>([]),[payments,setPayments]=useState<Payment[]>([]);
+ const [tab,setTab]=useState<Tab>("overview"),[modal,setModal]=useState<"transfer"|"bill"|null>(null),[amount,setAmount]=useState("25.00"),[recipient,setRecipient]=useState("maya"),[billType,setBillType]=useState("Electricity"),[reference,setReference]=useState("ACC-2048");
+ const [busy,setBusy]=useState(false),[healthy,setHealthy]=useState<boolean|null>(null),[notice,setNotice]=useState<{text:string;kind:"success"|"error"}|null>(null);
+ const wallet=wallets.find(w=>w.id===userId),others=wallets.filter(w=>w.id!==userId);
+ const refresh=async()=>{try{const [w,a,p,h]=await Promise.all([fetch(`${apiBase}/api/wallets`),fetch(`${apiBase}/api/wallet-activity?userId=${userId}`),fetch(`${apiBase}/api/payments`),fetch(`${apiBase}/health`)]);if(!w.ok||!a.ok||!p.ok)throw Error();setWallets((await w.json()).items);setActivity((await a.json()).items);setPayments((await p.json()).items);setHealthy(h.ok)}catch{setHealthy(false)}};
+ useEffect(()=>{void refresh()},[userId]);
+ const approvedVolume=useMemo(()=>payments.filter(p=>p.status==="APPROVED").reduce((n,p)=>n+p.amount,0),[payments]);
+ async function submit(e:FormEvent<HTMLFormElement>){e.preventDefault();const value=Number(amount);if(!Number.isFinite(value)||value<=0||Math.round(value*100)!==value*100){setNotice({text:"Enter a valid amount with up to two decimal places.",kind:"error"});return}setBusy(true);setNotice(null);try{const transfer=modal==="transfer";const r=await fetch(`${apiBase}/api/${transfer?"wallet-transfers":"bill-payments"}`,{method:"POST",headers:{"Content-Type":"application/json","Idempotency-Key":crypto.randomUUID()},body:JSON.stringify(transfer?{fromUser:userId,toUser:recipient,amount:value}:{userId,amount:value,billType,reference})});const d=await r.json();if(!r.ok)throw Error(d.error??"Transaction failed");setNotice({text:transfer?`Sent ${money(value)} to ${wallets.find(w=>w.id===recipient)?.displayName}.`:`${billType} bill paid successfully.`,kind:"success"});setModal(null);setAmount("25.00");await refresh()}catch(e){setNotice({text:e instanceof Error?e.message:"Request failed",kind:"error"})}finally{setBusy(false)}}
+ async function testPayment(scenario:"approve"|"decline"){setBusy(true);setNotice(null);try{const r=await fetch(`${apiBase}/api/payments`,{method:"POST",headers:{"Content-Type":"application/json","Idempotency-Key":crypto.randomUUID()},body:JSON.stringify({amount:42.5,currency:"USD",merchantId:"merchant-demo",scenario})});const d=await r.json();if(!r.ok)throw Error(d.error??"Payment request failed");setNotice({text:`Test card payment ${String(d.status).toLowerCase()}.`,kind:d.status==="APPROVED"?"success":"error"});await refresh()}catch(e){setNotice({text:e instanceof Error?e.message:"Request failed",kind:"error"})}finally{setBusy(false)}}
+ return <div className="app-shell"><aside className="sidebar"><div className="brand"><div className="brand-icon">C</div><div><strong>cardrail</strong><span>WALLET SANDBOX</span></div></div><div className="nav-label">WORKSPACE</div><nav><button className={tab==="overview"?"nav-item active":"nav-item"} onClick={()=>setTab("overview")}><span>⌂</span>Overview</button><button className={tab==="activity"?"nav-item active":"nav-item"} onClick={()=>setTab("activity")}><span>↔</span>Transactions</button><button className={tab==="operations"?"nav-item active":"nav-item"} onClick={()=>setTab("operations")}><span>◉</span>Operations lab</button></nav><div className="sidebar-bottom"><div className="sandbox-card"><i/> <div><b>Sandbox mode</b><small>Synthetic funds only</small></div></div><div className="profile"><div className="avatar">{wallet?.initials??"?"}</div><div><b>{wallet?.displayName??"Loading wallet"}</b><small>Demo account</small></div></div></div></aside>
+ <main className="main-area"><header className="page-header"><div><div className="breadcrumb">Workspace <span>/</span> {tab==="overview"?"Overview":tab==="activity"?"Transactions":"Operations lab"}</div><h1>{tab==="overview"?"Your wallet":tab==="activity"?"Transaction history":"Operations lab"}</h1></div><div className="header-actions"><div className={healthy?"connection connected":healthy===false?"connection disconnected":"connection"}><i/>{healthy?"API connected":healthy===false?"API unavailable":"Connecting"}</div><button className="icon-button" onClick={()=>void refresh()} aria-label="Refresh">↻</button><div className="avatar">{wallet?.initials??"?"}</div></div></header>
+ {notice&&<div className={`notice ${notice.kind}`} role="status">{notice.text}<button onClick={()=>setNotice(null)} aria-label="Dismiss">×</button></div>}
+ {tab==="overview"&&<><section className="welcome-row"><div><h2>Good to see you, {wallet?.displayName??"there"} <em>✦</em></h2><p>Manage your demo money and explore the payment flow.</p></div><label className="account-select">Viewing account<select value={userId} onChange={e=>setUserId(e.target.value)}>{wallets.map(w=><option key={w.id} value={w.id}>{w.displayName}</option>)}</select></label></section>
+ <section className="hero-grid"><article className="balance-card"><div className="balance-top"><span>AVAILABLE BALANCE</span><span className="balance-chip">◈ Demo wallet</span></div><div className="balance-amount">{wallet?money(wallet.balance,wallet.currency):"—"}</div><div className="balance-foot"><span><i/> Account active</span><span>WALLET · {userId.toUpperCase()}</span></div><div className="watermark">C</div></article><article className="quick-actions"><div><h3>Quick actions</h3><p>What would you like to do?</p></div><div className="action-grid"><button onClick={()=>{setModal("transfer");setNotice(null)}}><span className="action-icon send">↗</span><b>Send money</b><small>Transfer to a friend</small></button><button onClick={()=>{setModal("bill");setNotice(null)}}><span className="action-icon bill">▤</span><b>Pay a bill</b><small>Utilities & services</small></button><button onClick={()=>setTab("activity")}><span className="action-icon history">↻</span><b>Activity</b><small>Track transactions</small></button></div></article></section>
+ <section className="stats-grid"><article><small>TOTAL TRANSACTIONS</small><strong>{activity.length}</strong><span>For this demo account</span></article><article><small>APPROVED CARD VOLUME</small><strong>{money(approvedVolume)}</strong><span>Sandbox gateway activity</span></article><article><small>SERVICE STATUS</small><strong className={healthy?"up":"down"}>{healthy?"Operational":"Degraded"}</strong><span>API and database check</span></article></section>
+ <section className="content-card"><div className="card-heading"><div><h3>Recent activity</h3><p>Your latest wallet transactions</p></div><button className="text-button" onClick={()=>setTab("activity")}>View all →</button></div><ActivityList items={activity.slice(0,5)} userId={userId}/></section><div className="disclaimer">Educational sandbox only. Demo balances have no real-world monetary value.</div></>}
+ {tab==="activity"&&<section className="content-card activity-page"><div className="card-heading"><div><h3>All transactions</h3><p>Wallet activity for {wallet?.displayName??"this account"}</p></div><button className="outline-button" onClick={()=>void refresh()}>↻ Refresh</button></div><ActivityList items={activity} userId={userId}/></section>}
+ {tab==="operations"&&<div className="operations-layout"><section className="content-card"><div className="card-heading"><div><h3>Payment gateway simulator</h3><p>Exercise the existing authorization path.</p></div><span className="tag">TEST ONLY</span></div><p className="ops-description">These scenarios exercise the gateway, risk service, router, issuer simulator and PostgreSQL persistence. They are separate from wallet transfers.</p><div className="scenario-row"><div><b>Issuer approves</b><p>Expected outcome: APPROVED</p></div><button disabled={busy||!healthy} onClick={()=>void testPayment("approve")}>Run scenario</button></div><div className="scenario-row"><div><b>Issuer declines</b><p>Expected outcome: DECLINED</p></div><button className="danger-button" disabled={busy||!healthy} onClick={()=>void testPayment("decline")}>Run scenario</button></div><div className="ops-summary"><span>Recorded simulations <b>{payments.length}</b></span><span>Approved volume <b>{money(approvedVolume)}</b></span></div></section><section className="content-card"><div className="card-heading"><div><h3>Latest card simulations</h3><p>Gateway records stored in PostgreSQL</p></div></div>{payments.slice(0,6).map(p=><div className="activity-row" key={p.id}><div className="activity-icon card-icon">▣</div><div className="activity-main"><b>Card authorization</b><small>{dateLabel(p.createdAt)} · {p.merchantId}</small></div><div className="activity-amount"><b>{money(p.amount,p.currency)}</b><small className={`pill ${p.status.toLowerCase()}`}>{p.status}</small></div></div>)}{!payments.length&&<div className="empty-state">No card simulations yet.</div>}</section></div>}</main>
+ {modal&&<div className="backdrop" onMouseDown={e=>{if(e.target===e.currentTarget&&!busy)setModal(null)}}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div className="modal-head"><div><small>{modal==="transfer"?"WALLET TRANSFER":"UTILITY PAYMENT"}</small><h2 id="modal-title">{modal==="transfer"?"Send money":"Pay a bill"}</h2></div><button className="icon-button" onClick={()=>setModal(null)} disabled={busy}>×</button></div><form onSubmit={submit}><label>Amount (USD)<div className="amount-input"><span>$</span><input type="number" min=".01" max={wallet?.balance??0} step=".01" value={amount} onChange={e=>setAmount(e.target.value)} required/></div><small>Available: {wallet?money(wallet.balance):"—"}</small></label>{modal==="transfer"?<label>Send to<select value={recipient} onChange={e=>setRecipient(e.target.value)}>{others.map(w=><option key={w.id} value={w.id}>{w.displayName} · {money(w.balance)}</option>)}</select></label>:<><label>Utility<select value={billType} onChange={e=>setBillType(e.target.value)}><option>Electricity</option><option>Internet</option><option>Water</option><option>Mobile</option></select></label><label>Account reference<input value={reference} onChange={e=>setReference(e.target.value)} maxLength={80} required/></label></>}<div className="modal-note">ⓘ <p>{modal==="transfer"?"Both demo wallet balances update in one database transaction. No real money moves.":"The utility payment is simulated and debited from your demo wallet."}</p></div><div className="modal-actions"><button type="button" className="outline-button" disabled={busy} onClick={()=>setModal(null)}>Cancel</button><button type="submit" disabled={busy||!healthy}>{busy?"Processing…":modal==="transfer"?"Confirm transfer":"Pay bill"}</button></div></form></section></div>}</div>;
 }
+function ActivityList({items,userId}:{items:Activity[];userId:string}){if(!items.length)return <div className="empty-state"><strong>No activity yet</strong><p>Transfers and bill payments will appear here.</p></div>;return <div>{items.map(item=>{const outgoing=item.fromUser===userId;const transfer=item.kind==="TRANSFER";const label=transfer?(outgoing?`Sent to ${item.toUser}`:`Received from ${item.fromUser}`):item.description;return <div className="activity-row" key={item.id}><div className={`activity-icon ${transfer?"transfer-icon":"bill-icon"}`}>{transfer?"↗":"▤"}</div><div className="activity-main"><b>{label}</b><small>{dateLabel(item.createdAt)} · {transfer?"Wallet transfer":"Utility payment"}</small></div><div className="activity-amount"><b className={outgoing?"negative":"positive"}>{outgoing?"−":"+"}{money(item.amount,item.currency)}</b><small className="complete">Completed</small></div></div>})}</div>}
