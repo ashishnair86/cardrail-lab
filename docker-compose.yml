@@ -1,0 +1,87 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: cardrail
+      POSTGRES_USER: cardrail
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cardrail-local-dev-only}
+    ports:
+      - "5432:5432"
+    volumes:
+      - cardrail-postgres-data:/var/lib/postgresql/data
+      - ./infrastructure/docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cardrail -d cardrail"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+
+  issuer-simulator:
+    build: ./services/issuer-simulator
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4003/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  network-router:
+    build: ./services/network-router
+    environment:
+      ISSUER_URL: http://issuer-simulator:4003
+    depends_on:
+      issuer-simulator:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  risk-service:
+    build: ./services/risk-service
+    expose:
+      - "4001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4001/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  payment-api:
+    build: ./services/payment-api
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgres://cardrail:${POSTGRES_PASSWORD:-cardrail-local-dev-only}@postgres:5432/cardrail
+      RISK_SERVICE_URL: http://risk-service:4001
+      NETWORK_SERVICE_URL: http://network-router:4002
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      risk-service:
+        condition: service_healthy
+      network-router:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+
+  web:
+    build: ./services/web
+    ports:
+      - "5173:80"
+    depends_on:
+      payment-api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  cardrail-postgres-data:
