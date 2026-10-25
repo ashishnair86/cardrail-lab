@@ -24,7 +24,7 @@ def evaluate(request: RiskRequest):
         score += 25
         reasons.append("very-high-value-synthetic-transaction")
     if request.merchantId.lower().startswith("risk-"):
-        score += 60
+        score += 70
         reasons.append("synthetic-risk-merchant-marker")
     decision = "DECLINE" if score >= 70 else "APPROVE"
     return {"decision": decision, "score": min(score, 100), "reason": ",".join(reasons)}
