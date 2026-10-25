@@ -1,20 +1,26 @@
-# CardRail Lab
+# CardRail Wallet & SRE Lab
 
-CardRail is an educational payment-processing simulation for learning application architecture, distributed systems, SRE, DevOps, Kubernetes, and cloud operations. It uses synthetic data only and is not a real payment processor or card network.
+CardRail is an educational wallet and payment-platform simulation designed as an SRE/DevOps portfolio project. It uses synthetic funds only and does not connect to real banks or card networks.
 
-## Current end-to-end flow
+## Wallet experience
 
-Merchant-style API request → Payment Gateway API → Risk Service → Network Router → Issuer Simulator → PostgreSQL persistence → API response. The React operations dashboard can create and list simulated payments.
+- Demo wallets for Alex Morgan, Maya Patel, and Jordan Lee
+- Wallet balance and transaction history
+- Transfers between demo wallets, with both balances updated in one PostgreSQL transaction
+- Simulated utility bill payments
+- Idempotency keys and a double-entry-style ledger record for wallet movements
+- A separate operations area to exercise the existing card authorization, risk, routing, and issuer simulation flow
+
+This is a learning sandbox, not a real financial product. It has no production authentication, KYC, regulated money movement, real biller integration, or PCI certification. Do not enter real personal or payment information.
 
 ## Stack
 
-- React + TypeScript + Vite operations dashboard
-- Node.js + TypeScript payment gateway
-- Python + FastAPI synthetic risk service
-- Node.js network router and issuer simulator
-- PostgreSQL for durable payment records and idempotency keys
-- Docker Compose for local orchestration
-- Later milestones: Kafka, Redis, OpenTelemetry, Prometheus/Grafana, Kubernetes, Helm, Jenkins, Argo CD, and selected Floci/AWS labs
+- React + TypeScript + Vite
+- Node.js + TypeScript + Express
+- PostgreSQL
+- Python + FastAPI risk simulation
+- Network router and issuer simulator
+- Docker Compose for local development
 
 ## Run locally
 
@@ -22,12 +28,31 @@ Merchant-style API request → Payment Gateway API → Risk Service → Network 
 docker compose up --build
 ```
 
-- Dashboard: http://localhost:5173
-- Payment API: http://localhost:3000
-- Health: http://localhost:3000/health
+- Wallet: http://localhost:5173
+- API health: http://localhost:3000/health
+- Wallet list: http://localhost:3000/api/wallets
 
-See [Architecture](docs/ARCHITECTURE.md) and [Local development](docs/LOCAL-DEVELOPMENT.md) for flow explanations and test requests.
+The wallet tables and demo accounts are created by the SQL init scripts on first database initialization. If you already have a persistent PostgreSQL volume, the new init script will not run automatically; see the migration note below.
 
-## Safety and scope
+### Existing database volume
 
-Use synthetic data only. Do not use real card numbers, CVVs, PINs, production credentials, or sensitive Mastercard information. This project does not connect to Visa or Mastercard, does not implement real acquiring/issuing, and is not PCI-certified. Risk rules and issuer decisions are intentionally simulated.
+For an existing local volume, apply the new schema manually:
+
+```bash
+docker compose exec -T postgres psql -U cardrail -d cardrail < infrastructure/docker/postgres/init/002-wallet.sql
+```
+
+This command creates wallet tables and seeds the demo accounts. It does not delete existing payment data.
+
+## SRE learning goals
+
+1. Validate transaction integrity and idempotency.
+2. Add automated integration tests and CI.
+3. Instrument latency, errors, and dependency health.
+4. Build SLOs, dashboards, alerts, and incident runbooks.
+5. Inject controlled failures and demonstrate safe recovery.
+6. Add deployment automation and later deploy to local Kubernetes.
+
+## Safety boundary
+
+All balances and transactions are synthetic. The application is not a bank, wallet provider, or payment processor. It does not implement production-grade authentication or authorization; the demo account selector is for local learning only.
